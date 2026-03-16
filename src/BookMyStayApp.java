@@ -1,6 +1,7 @@
+import java.io.*;
 import java.util.*;
 
-class Reservation {
+class Reservation implements Serializable {
     private String guestName;
     private String roomType;
     private int nights;
@@ -37,7 +38,7 @@ class Reservation {
     }
 }
 
-class RoomInventory {
+class RoomInventory implements Serializable {
     private Map<String, Integer> inventory;
 
     public RoomInventory() {
@@ -48,21 +49,19 @@ class RoomInventory {
         inventory.put(roomType, availability);
     }
 
-    public synchronized boolean allocateRoom(String roomType) {
-        if (!inventory.containsKey(roomType)) {
-            System.out.println("Invalid room type: " + roomType);
-            return false;
-        }
+    public int getAvailability(String roomType) {
+        return inventory.getOrDefault(roomType, 0);
+    }
+
+    public boolean allocateRoom(String roomType) {
+        if (!inventory.containsKey(roomType)) return false;
         int available = inventory.get(roomType);
-        if (available <= 0) {
-            System.out.println("No availability for " + roomType);
-            return false;
-        }
+        if (available <= 0) return false;
         inventory.put(roomType, available - 1);
         return true;
     }
 
-    public synchronized void displayInventory() {
+    public void displayInventory() {
         System.out.println("\n--- Current Inventory ---");
         for (String roomType : inventory.keySet()) {
             System.out.println(roomType + " available: " + inventory.get(roomType));
@@ -70,63 +69,104 @@ class RoomInventory {
     }
 }
 
-class BookingProcessor implements Runnable {
-    private Reservation reservation;
-    private RoomInventory inventory;
+class BookingHistory implements Serializable {
+    private List<Reservation> history;
 
-    public BookingProcessor(Reservation reservation, RoomInventory inventory) {
-        this.reservation = reservation;
-        this.inventory = inventory;
+    public BookingHistory() {
+        history = new ArrayList<>();
     }
 
-    @Override
-    public void run() {
-        synchronized (inventory) {
-            boolean success = inventory.allocateRoom(reservation.getRoomType());
-            if (success) {
-                System.out.println("\nBooking Confirmed for " + reservation.getGuestName());
+    public void addReservation(Reservation reservation) {
+        history.add(reservation);
+    }
+
+    public List<Reservation> getAllReservations() {
+        return new ArrayList<>(history);
+    }
+
+    public void displayHistory() {
+        System.out.println("\n--- Booking History ---");
+        if (history.isEmpty()) {
+            System.out.println("No reservations found.");
+        } else {
+            for (Reservation reservation : history) {
                 reservation.displayReservation();
-            } else {
-                System.out.println("\nBooking Failed for " + reservation.getGuestName() +
-                        " | Room Type: " + reservation.getRoomType());
             }
         }
     }
 }
 
+class PersistenceService {
+    public static void saveState(RoomInventory inventory, BookingHistory history, String filename) {
+        try (ObjectOutputStream out = new ObjectOutputStream(new FileOutputStream(filename))) {
+            out.writeObject(inventory);
+            out.writeObject(history);
+            System.out.println("\nSystem state saved successfully.");
+        } catch (IOException e) {
+            System.out.println("Error saving state: " + e.getMessage());
+        }
+    }
+
+    public static Object[] loadState(String filename) {
+        try (ObjectInputStream in = new ObjectInputStream(new FileInputStream(filename))) {
+            RoomInventory inventory = (RoomInventory) in.readObject();
+            BookingHistory history = (BookingHistory) in.readObject();
+            System.out.println("\nSystem state loaded successfully.");
+            return new Object[]{inventory, history};
+        } catch (Exception e) {
+            System.out.println("No previous state found or error loading state. Starting fresh.");
+            return new Object[]{new RoomInventory(), new BookingHistory()};
+        }
+    }
+}
 public class BookMyStayApp {
     public static void main(String[] args) {
         System.out.println("Welcome to the Hotel Booking System!");
         System.out.println("Application: Book My Stay");
-        System.out.println("Version: 11.1");
+        System.out.println("Version: 12.1");
         System.out.println("-----------------------------------");
 
-        RoomInventory inventory = new RoomInventory();
-        inventory.addRoomType("Single Room", 2);
-        inventory.addRoomType("Double Room", 1);
+        String filename = "system_state.dat";
+        Object[] state = PersistenceService.loadState(filename);
+        RoomInventory inventory = (RoomInventory) state[0];
+        BookingHistory history = (BookingHistory) state[1];
 
-        List<Reservation> reservations = new ArrayList<>();
-        reservations.add(new Reservation("Alice", "Single Room", 2, "SingleRoom-ABC123"));
-        reservations.add(new Reservation("Bob", "Single Room", 1, "SingleRoom-XYZ789"));
-        reservations.add(new Reservation("Charlie", "Double Room", 1, "DoubleRoom-DEF456"));
-        reservations.add(new Reservation("Diana", "Double Room", 2, "DoubleRoom-GHI789"));
-
-        List<Thread> threads = new ArrayList<>();
-        for (Reservation reservation : reservations) {
-            Thread t = new Thread(new BookingProcessor(reservation, inventory));
-            threads.add(t);
-            t.start();
+        if (inventory.getAvailability("Single Room") == 0 &&
+                inventory.getAvailability("Double Room") == 0 &&
+                inventory.getAvailability("Suite Room") == 0) {
+            inventory.addRoomType("Single Room", 2);
+            inventory.addRoomType("Double Room", 1);
+            inventory.addRoomType("Suite Room", 1);
         }
 
-        for (Thread t : threads) {
-            try {
-                t.join();
-            } catch (InterruptedException e) {
-                System.out.println("Thread interrupted: " + e.getMessage());
-            }
+        Scanner scanner = new Scanner(System.in);
+        System.out.print("Enter guest name: ");
+        String guestName = scanner.nextLine();
+
+        System.out.print("Enter room type (Single Room / Double Room / Suite Room): ");
+        String roomType = scanner.nextLine();
+
+        System.out.print("Enter number of nights: ");
+        int nights = scanner.nextInt();
+        scanner.nextLine();
+
+        boolean success = inventory.allocateRoom(roomType);
+        if (success) {
+            String roomId = roomType.replace(" ", "") + "-" + UUID.randomUUID().toString().substring(0, 6);
+            Reservation reservation = new Reservation(guestName, roomType, nights, roomId);
+            history.addReservation(reservation);
+            System.out.println("\n--- Reservation Confirmed ---");
+            reservation.displayReservation();
+        } else {
+            System.out.println("\nBooking Failed: No availability for " + roomType);
         }
 
         inventory.displayInventory();
-        System.out.println("\nApplication terminated successfully.");
+        history.displayHistory();
+
+        PersistenceService.saveState(inventory, history, filename);
+
+        System.out.println("\nApplication terminated safely with persistence.");
+        scanner.close();
     }
 }
