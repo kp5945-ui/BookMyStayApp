@@ -1,39 +1,40 @@
-
+import java.util.HashMap;
 import java.util.Scanner;
 
-abstract class Room {
-    private String roomType;
-    private int numberOfBeds;
-    private double pricePerNight;
+class RoomInventory {
+    private HashMap<String, Integer> inventory;
 
-    public Room(String roomType, int numberOfBeds, double pricePerNight) {
-        this.roomType = roomType;
-        this.numberOfBeds = numberOfBeds;
-        this.pricePerNight = pricePerNight;
+    public RoomInventory() {
+        inventory = new HashMap<>();
     }
 
-    public void displayRoomDetails() {
-        System.out.println("Room Type: " + roomType);
-        System.out.println("Beds: " + numberOfBeds);
-        System.out.println("Price per Night: $" + pricePerNight);
+    public void addRoomType(String roomType, int availability) {
+        inventory.put(roomType, availability);
     }
-}
 
-class SingleRoom extends Room {
-    public SingleRoom() {
-        super("Single Room", 1, 50.0);
+    public int getAvailability(String roomType) {
+        return inventory.getOrDefault(roomType, 0);
     }
-}
 
-class DoubleRoom extends Room {
-    public DoubleRoom() {
-        super("Double Room", 2, 90.0);
+    public void updateAvailability(String roomType, int booked) {
+        if (inventory.containsKey(roomType)) {
+            int current = inventory.get(roomType);
+            if (booked <= current) {
+                inventory.put(roomType, current - booked);
+                System.out.println(booked + " " + roomType + "(s) booked successfully.");
+            } else {
+                System.out.println("Not enough " + roomType + " available.");
+            }
+        } else {
+            System.out.println("Room type not found.");
+        }
     }
-}
 
-class SuiteRoom extends Room {
-    public SuiteRoom() {
-        super("Suite Room", 3, 150.0);
+    public void displayInventory() {
+        System.out.println("\n--- Current Inventory ---");
+        for (String roomType : inventory.keySet()) {
+            System.out.println(roomType + " available: " + inventory.get(roomType));
+        }
     }
 }
 
@@ -41,44 +42,26 @@ public class BookMyStayApp {
     public static void main(String[] args) {
         System.out.println("Welcome to the Hotel Booking System!");
         System.out.println("Application: Book My Stay");
-        System.out.println("Version: 2.1");
+        System.out.println("Version: 3.1");
         System.out.println("-----------------------------------");
 
-        Room single = new SingleRoom();
-        Room doubleRoom = new DoubleRoom();
-        Room suite = new SuiteRoom();
+        RoomInventory inventory = new RoomInventory();
+        inventory.addRoomType("Single Room", 5);
+        inventory.addRoomType("Double Room", 3);
+        inventory.addRoomType("Suite Room", 2);
 
-        int singleRoomAvailability = 5;
-        int doubleRoomAvailability = 3;
-        int suiteRoomAvailability = 2;
+        inventory.displayInventory();
 
         Scanner scanner = new Scanner(System.in);
 
-        System.out.println("\n--- Room Information ---");
-        single.displayRoomDetails();
-        System.out.println("Available: " + singleRoomAvailability);
-        System.out.print("How many Single Rooms would you like to book? ");
-        int singleBooking = scanner.nextInt();
-        singleRoomAvailability -= singleBooking;
+        System.out.print("\nEnter room type to book (Single Room / Double Room / Suite Room): ");
+        String roomType = scanner.nextLine();
 
-        System.out.println();
-        doubleRoom.displayRoomDetails();
-        System.out.println("Available: " + doubleRoomAvailability);
-        System.out.print("How many Double Rooms would you like to book? ");
-        int doubleBooking = scanner.nextInt();
-        doubleRoomAvailability -= doubleBooking;
+        System.out.print("Enter number of rooms to book: ");
+        int booked = scanner.nextInt();
 
-        System.out.println();
-        suite.displayRoomDetails();
-        System.out.println("Available: " + suiteRoomAvailability);
-        System.out.print("How many Suite Rooms would you like to book? ");
-        int suiteBooking = scanner.nextInt();
-        suiteRoomAvailability -= suiteBooking;
-
-        System.out.println("\n--- Updated Availability ---");
-        System.out.println("Single Rooms left: " + singleRoomAvailability);
-        System.out.println("Double Rooms left: " + doubleRoomAvailability);
-        System.out.println("Suite Rooms left: " + suiteRoomAvailability);
+        inventory.updateAvailability(roomType, booked);
+        inventory.displayInventory();
 
         System.out.println("\nApplication terminated successfully.");
         scanner.close();
